@@ -4,7 +4,10 @@ import io
 import socket
 import struct
 import time
-from picamera2 import Picamera2,Preview
+import asyncio
+import websockets
+import json
+from picamera2 import Picamera2, Preview
 from picamera2.encoders import JpegEncoder
 from picamera2.outputs import FileOutput
 from picamera2.encoders import Quality
@@ -55,6 +58,11 @@ class Server:
         self.Mode = '0'
         self.endChar='\n'
         self.intervalChar='#'
+        
+        # Add WebSocket related attributes
+        self.ws_clients = set()
+        self.ws_server = None
+        
     def get_interface_ip(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         return socket.inet_ntoa(fcntl.ioctl(s.fileno(),
@@ -313,6 +321,70 @@ class Server:
                     self.ACTION=False
             self.ACTIONTimer = threading.Timer(0.1,self.sendACTION)
             self.ACTIONTimer.start()
- 
+
+    async def handle_websocket(self, websocket):
+        """Handle WebSocket client connections"""
+        try:
+            self.ws_clients.add(websocket)
+            async for message in websocket:
+                try:
+                    data = json.loads(message)
+                    # Handle commands similar to TCP readdata method
+                    if 'command' in data:
+                        cmd_str = data['command']
+                        self.handle_command(cmd_str)
+                        
+                except json.JSONDecodeError:
+                    print("Invalid JSON received")
+                    
+        finally:
+            self.ws_clients.remove(websocket)
+
+    async def start_websocket_server(self):
+        """Start WebSocket server"""
+        self.ws_server = await websockets.serve(
+            self.handle_websocket,
+            self.get_interface_ip(),
+            8765  # WebSocket port
+        )
+        print(f"WebSocket server started on ws://{self.get_interface_ip()}:8765")
+
+    def handle_command(self, cmd_str):
+        """Handle commands from both WebSocket and TCP clients"""
+        # Extract command handling logic from readdata method
+        data = cmd_str.split("#")
+        if cmd.CMD_MODE in data:
+            if data[1] == '0':
+                self.stopMode()
+                self.Mode = '0'
+                self.sonic = False
+            # ... rest of command handling ...
+
+    async def broadcast_ultrasonic(self, distance):
+        """Broadcast ultrasonic data to all WebSocket clients"""
+        message = json.dumps({
+            "type": "ultrasonic",
+            "distance": distance
+        })
+        websockets.broadcast(self.ws_clients, message)
+
+    def run(self):
+        """Run both TCP and WebSocket servers"""
+        # Start TCP servers
+        self.StartTcpServer()
+        
+        # Start WebSocket server
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(self.start_websocket_server())
+        
+        # Start TCP handler threads
+        self.ReadData = Thread(target=self.readdata)
+        self.SendVideo = Thread(target=self.sendvideo)
+        self.ReadData.start()
+        self.SendVideo.start()
+        
+        # Run event loop
+        loop.run_forever()
+
 if __name__=='__main__':
     pass
