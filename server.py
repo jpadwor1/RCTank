@@ -350,15 +350,88 @@ class Server:
         print(f"WebSocket server started on ws://{self.get_interface_ip()}:8765")
 
     def handle_command(self, cmd_str):
-        """Handle commands from both WebSocket and TCP clients"""
-        # Extract command handling logic from readdata method
+    
         data = cmd_str.split("#")
-        if cmd.CMD_MODE in data:
+        command_type = data[0]
+
+        if command_type == cmd.CMD_MODE:
             if data[1] == '0':
                 self.stopMode()
                 self.Mode = '0'
                 self.sonic = False
-            # ... rest of command handling ...
+            elif data[1] == '1':
+                self.stopMode()
+                self.Mode = '1'
+                self.ultrasonicRun = threading.Thread(target=self.ultrasonic.run)
+                self.ultrasonicRun.start()
+                self.sonic = True
+                self.ultrasonicTimer = threading.Timer(0.5, self.sendUltrasonic)
+                self.ultrasonicTimer.start()
+            elif data[1] == '2':
+                self.stopMode()
+                self.Mode = '2'
+                self.auto_ClearRun = Thread(target=self.auto_Clear.run)
+                self.auto_ClearRun.start()
+                self.sonic = True
+                self.ultrasonicTimer = threading.Timer(0.5, self.sendUltrasonic)
+                self.ultrasonicTimer.start()
+
+        elif command_type == cmd.CMD_MOTOR and self.Mode == '0':
+            try:
+                data1 = int(data[1])
+                data2 = int(data[2])
+                self.PWM.setMotorModel(data1, data2)
+            except (ValueError, IndexError):
+                print("Invalid motor command data:", data)
+
+        elif command_type == cmd.CMD_SERVO:
+            try:
+                servo_id = data[1]
+                angle = int(data[2])
+                self.servo.setServoPwm(servo_id, angle)
+            except (ValueError, IndexError):
+                print("Invalid servo command data:", data)
+
+        elif command_type == cmd.CMD_LED:
+            try:
+                led_mode = int(data[1])
+                red = int(data[2])
+                green = int(data[3])
+                blue = int(data[4])
+                brightness = int(data[5])
+                Led_Mode = Thread(target=self.led.ledMode, args=(data,))
+                Led_Mode.start()
+            except (ValueError, IndexError):
+                print("Invalid LED command data:", data)
+
+        elif command_type == cmd.CMD_ACTION:
+            self.servoMode1 = data[1]
+            if self.servoMode1 == '0':
+                try:
+                    stop_thread(servoMode)
+                except NameError:
+                    pass
+                self.servoMode.ServoMode(self.servoMode1)
+            elif self.servoMode1 in ('1', '2'):
+                try:
+                    stop_thread(servoMode)
+                except NameError:
+                    pass
+                servoMode = Thread(target=self.servoMode.ServoMode, args=(data[1],))
+                servoMode.start()
+                self.ACTION = True
+                self.ACTIONTimer = threading.Timer(0.15, self.sendACTION)
+                self.ACTIONTimer.start()
+
+        elif command_type == cmd.CMD_SONIC:
+            self.sonic = True
+            self.ultrasonicTimer = threading.Timer(0.1, self.sendUltrasonic)
+            self.ultrasonicTimer.start()
+            if data[1] == '0':
+                self.sonic = False
+
+        else:
+            print("Unrecognized command type:", command_type)
 
     async def broadcast_ultrasonic(self, distance):
         """Broadcast ultrasonic data to all WebSocket clients"""
