@@ -61,12 +61,16 @@ async def offer(request):
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
 
+    response_headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+    }
+
     return web.json_response({
         "sdp": pc.localDescription.sdp,
         "type": pc.localDescription.type
-    }, headers={
-        "Access-Control-Allow-Origin": "*"
-    })
+    }, headers=response_headers)
 
 async def on_shutdown(app):
     coros = [pc.close() for pc in pcs]
@@ -121,7 +125,7 @@ def handle_command(cmd_str):
             green = int(data[3])
             blue = int(data[4])
             brightness = int(data[5])
-            led.ledMode(led_mode, red, green, blue, brightness)
+            led.ledMode(data)
             print(f"LED mode set to {led_mode}, RGB: ({red}, {green}, {blue}), Brightness: {brightness}")
         except (ValueError, IndexError):
             print("Invalid LED command")
