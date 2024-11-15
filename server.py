@@ -64,7 +64,8 @@ async def offer(request):
     response_headers = {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Access-Control-Allow-Credentials": "true"
     }
 
     return web.json_response({
@@ -77,11 +78,25 @@ async def on_shutdown(app):
     await asyncio.gather(*coros)
     pcs.clear()
 
-# Create aiohttp application
-app = web.Application()
+@web.middleware
+async def cors_middleware(request, handler):
+    if request.method == "OPTIONS":
+        return web.Response(headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+            "Access-Control-Allow-Credentials": "true",
+        })
+    response = await handler(request)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    return response
+
+app = web.Application(middlewares=[cors_middleware])
 app.router.add_route("POST", "/vws", offer)
 app.router.add_route("OPTIONS", "/vws", handle_options)
-
 # WebSocket control server
 async def handle_control_websocket(websocket, path):
     """Handle WebSocket control commands"""
