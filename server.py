@@ -58,8 +58,13 @@ async def offer(request):
     pc.addTrack(video_track)
 
     await pc.setRemoteDescription(RTCSessionDescription(sdp=params["sdp"], type=params["type"]))
+       # Create an answer and modify the SDP to include the correct direction
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
+
+       # Ensure the SDP includes the correct direction attribute
+    sdp = pc.localDescription.sdp.replace("a=recvonly", "a=sendrecv")
+    sdp = sdp.replace("a=sendonly", "a=sendrecv")
 
     response_headers = {
         "Access-Control-Allow-Origin": "*",
@@ -97,6 +102,7 @@ async def cors_middleware(request, handler):
 app = web.Application(middlewares=[cors_middleware])
 app.router.add_route("POST", "/vws", offer)
 app.router.add_route("OPTIONS", "/vws", handle_options)
+
 # WebSocket control server
 async def handle_control_websocket(websocket, path):
     """Handle WebSocket control commands"""
